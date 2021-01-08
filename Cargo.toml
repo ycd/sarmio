@@ -1,0 +1,17 @@
+[package]
+authors = ["Yagiz Degirmenci <yagizcanilbey1903@gmail.com>"]
+description = "Distributed unique ID generator."
+edition = "2018"
+include = [
+  "**/*.rs",
+  "Cargo.toml",
+]
+license = "MIT OR Apache-2.0"
+name = "sarmio"
+readme = "README.md"
+repository = "https://github.com/ycd/sarmio"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
