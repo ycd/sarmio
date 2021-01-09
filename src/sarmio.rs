@@ -42,9 +42,7 @@ impl Sarmio {
         let mut current_time = self.time.lock().unwrap();
         let mut timestamp = self.get_time();
         if timestamp < *current_time {
-            thread::sleep(time::Duration::from_millis(
-                ((*current_time - timestamp) + 1) as u64,
-            ));
+            sleep((*current_time - timestamp) + 1);
             timestamp = self.get_time();
         } else if timestamp == *current_time {
             self.sequence = (self.sequence + 1) & self.machine_id
@@ -52,7 +50,7 @@ impl Sarmio {
             self.sequence = 0;
         }
         *current_time = timestamp;
-        (timestamp << 39) | (self.machine_id << 8) | self.sequence
+        (timestamp << 24) | self.sequence << 16 | self.machine_id
     }
 
     // Set machine ID
@@ -72,19 +70,19 @@ impl Sarmio {
     }
 }
 
+fn sleep(milis: u64) {
+    thread::sleep(time::Duration::from_millis(milis));
+}
+
 pub fn decompose(id: u64) -> HashMap<String, u64> {
     let mut map = HashMap::new();
     let mask_machine_id = (1 << 16) - 1;
 
     map.insert("id".into(), id);
-    map.insert("time".into(), ((id >> 24) as f64 / 673.167) as u64);
-    map.insert("machine-id".into(), get_machine_id(id & mask_machine_id));
+    map.insert("time".into(), (id >> 24) as u64);
+    map.insert("machine-id".into(), id & mask_machine_id);
 
     map
-}
-
-fn get_machine_id(num: u64) -> u64 {
-    num / 256
 }
 
 impl Iterator for Sarmio {
