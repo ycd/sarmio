@@ -1,31 +1,30 @@
 use core::time;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
 // use std::{error::Error, thread::current};
+use std::fmt;
 use std::thread;
 
-pub enum ID {
-    Id(u64),
-    Time(u64),
-    MachineID(u64),
-}
-
-// Sarmio is a distributed unique ID generator
-// It has 4  methods that you can use
-// new
-// next_id
-// next
-// machine_id
-// get_machine_id
-//
-// machine id must be smaller than 256.
+#[derive(Clone, Debug)]
 pub struct Sarmio {
     time: Arc<Mutex<u64>>,
     machine_id: u64,
     sequence: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ID {
+    pub id: u64,
+    pub machine_id: u64,
+    pub time: u64,
+}
+
+impl Iterator for Sarmio {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<u64> {
+        Option::from(self.next_id())
+    }
 }
 
 impl Sarmio {
@@ -38,19 +37,27 @@ impl Sarmio {
     }
 
     // Creates a new unique ID.
-    pub fn next_id(&mut self) -> u64 {
+    pub fn next_id(&mut self) -> Option<u64> {
         let mut current_time = self.time.lock().unwrap();
         let mut timestamp = self.get_time();
         if timestamp < *current_time {
-            sleep((*current_time - timestamp) + 1);
-            timestamp = self.get_time();
+            if *current_time - timestamp > 150 {
+                return None;
+            } else {
+                self.sleep((*current_time - timestamp) + 1);
+                timestamp = self.get_time();
+            }
         } else if timestamp == *current_time {
             self.sequence = (self.sequence + 1) & self.machine_id
         } else {
             self.sequence = 0;
         }
         *current_time = timestamp;
-        (timestamp << 24) | self.sequence << 16 | self.machine_id
+        Option::from((timestamp << 24) | self.sequence << 16 | self.machine_id)
+    }
+
+    fn sleep(&self, milis: u64) {
+        thread::sleep(time::Duration::from_millis(milis));
     }
 
     // Set machine ID
@@ -70,25 +77,32 @@ impl Sarmio {
     }
 }
 
-fn sleep(milis: u64) {
-    thread::sleep(time::Duration::from_millis(milis));
+impl fmt::Display for ID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "id: {}\ntime: {}\nmachine_id: {}",
+            self.id, self.time, self.machine_id
+        )
+    }
 }
 
-pub fn decompose(id: u64) -> HashMap<String, u64> {
-    let mut map = HashMap::new();
+pub fn decompose(id: u64) -> ID {
     let mask_machine_id = (1 << 16) - 1;
 
-    map.insert("id".into(), id);
-    map.insert("time".into(), (id >> 24) as u64);
-    map.insert("machine-id".into(), id & mask_machine_id);
-
-    map
+    ID {
+        id: id,
+        time: (id >> 24) as u64,
+        machine_id: id & mask_machine_id,
+    }
 }
 
-impl Iterator for Sarmio {
-    type Item = u64;
+impl ID {
+    pub fn older(&self, other: &ID) -> bool {
+        self.time < other.time
+    }
 
-    fn next(&mut self) -> Option<u64> {
-        Option::from(self.next_id())
+    pub fn same_machine(&self, other: &ID) -> bool {
+        self.machine_id == other.machine_id
     }
 }
